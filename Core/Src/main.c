@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "dac.h"
 #include "dma.h"
 #include "opamp.h"
@@ -36,7 +37,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DAC_BUF_LEN     10000
+#define DAC_OUT_0A      617
+#define AMPERE_TO_DAC   0.04013
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,7 +50,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile uint16_t value[10] = {2048, 2048, 2048, 2048, 2048, 0, 0, 0, 0, 0};
+volatile uint16_t dacBuffer[DAC_BUF_LEN];
+volatile float setpoint = 10.0;
+volatile int dutyCycle = 10;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -93,13 +98,23 @@ int main(void)
   MX_OPAMP1_Init();
   MX_DAC3_Init();
   MX_TIM6_Init();
+  MX_ADC2_Init();
+  MX_DAC1_Init();
+  MX_OPAMP2_Init();
   /* USER CODE BEGIN 2 */
   
+  for (int i = 0; i < DAC_BUF_LEN; i++) {
+    dacBuffer[i] = DAC_OUT_0A;
+  }  
+  dutyCycle = 10;
   HAL_OPAMP_Start(&hopamp1);     
-  HAL_DAC_Start_DMA(&hdac3, DAC_CHANNEL_1, (uint32_t *) &value, 10, DAC_ALIGN_12B_R);
+  HAL_DAC_Start_DMA(&hdac3, DAC_CHANNEL_1, (uint32_t *) &dacBuffer, DAC_BUF_LEN, DAC_ALIGN_12B_R);
   HAL_TIM_Base_Start(&htim6);
-  
-    
+
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (uint32_t) (0.5 / 3.3 * 4096.0));  
+
+  HAL_OPAMP_Start(&hopamp2);  
   
   /* USER CODE END 2 */
 
@@ -110,10 +125,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // HAL_Delay(10);
-    // value = 0;
-    // HAL_Delay(10);
-    // value = 0xFFF;
+    for (int i = 0; i < dutyCycle; i++) {
+      dacBuffer[i] = (uint16_t) (setpoint / AMPERE_TO_DAC) + DAC_OUT_0A;
+    }
+    for (int i = dutyCycle; i < DAC_BUF_LEN; i++ ) {
+      dacBuffer[i] = DAC_OUT_0A;
+    }
   }
   /* USER CODE END 3 */
 }
@@ -130,6 +147,7 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
@@ -146,6 +164,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -192,8 +211,7 @@ void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+     ex: printf("Wrong parameters dacBuffer: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
